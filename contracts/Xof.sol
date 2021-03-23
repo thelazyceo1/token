@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 contract Xof is ERC20 {
   CfaPriceOracleInterface priceOracle;
 
-  constructor(address cfaPriceOracleAddress) ERC20("XOF",  "CFA pegged Celo backed stablecoin") {
+  constructor(address cfaPriceOracleAddress) ERC20("XOF",  "CFA token backed by CELO stablecoin") {
          priceOracle = CfaPriceOracleInterface(cfaPriceOracleAddress);
     }
     
