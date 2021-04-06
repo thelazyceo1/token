@@ -4,12 +4,15 @@ pragma solidity >=0.7.0 <0.8.0;
 
 import "./CfaPriceOracleInterface.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/math/SafeMath.sol";
 
 
 contract Xof is ERC20 {
+  using SafeMath for uint; // 
+
   CfaPriceOracleInterface priceOracle;
 
-  constructor(address cfaPriceOracleAddress) ERC20("XOF",  "CFA token backed by CELO stablecoin") {
+  constructor(address cfaPriceOracleAddress) ERC20("XOF",  "CFA") {
          priceOracle = CfaPriceOracleInterface(cfaPriceOracleAddress);
     }
     
