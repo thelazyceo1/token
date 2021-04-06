@@ -1,90 +1,283 @@
-var Promise = require("bluebird");
-var getBalance = Promise.promisify(web3.eth.getBalance);
-var Xof = artifacts.require("./Xof.sol");
-var MockCfaPriceOracle = artifacts.require("./MockCfaPriceOracle.sol");
+// We import Chai to use its asserting functions here.
+const { expect } = require("chai");
 
-contract('Xof', function(accounts) {
-  var cFA;
-  var mockEtherPriceOracle;
+// `describe` is a Mocha function that allows you to organize your tests. It's
+// not actually needed, but having your tests organized makes debugging them
+// easier. All Mocha functions are available in the global scope.
 
-  beforeEach(async () => {
-    mockEtherPriceOracle = await MockCfaPriceOracle.deployed()
-    cFA = await Xof.new(MockCfaPriceOracle.address);
+// `describe` receives the name of a section of your test suite, and a callback.
+// The callback must define the tests of that section. This callback can't be
+// an async function.
+describe("ERC contract", function () {
+  // Mocha has four functions that let you hook into the the test runner's
+  // lifecyle. These are: `before`, `beforeEach`, `after`, `afterEach`.
+
+  // They're very useful to setup the environment for tests, and to clean it
+  // up after they run.
+
+  // A common pattern is to declare some variables, and assign them in the
+  // `before` and `beforeEach` callbacks.
+
+  let Token;
+  let hardhatToken;
+  let owner;
+  let addr1;
+  let addr3;
+  let addr2;
+  let addrs;
+
+  // `beforeEach` will run before each test, re-deploying the contract every
+  // time. It receives a callback, which can be async.
+  beforeEach(async function () {
+    // Get the ContractFactory and Signers here.
+    Token = await ethers.getContractFactory("Xof");
+    [owner, addr1,addr3, addr2, ...addrs] = await ethers.getSigners();
+
+    // To deploy our contract, we just have to call Token.deploy() and await
+    // for it to be deployed(), which happens onces its transaction has been
+    // mined.
+    hardhatToken = await Token.deploy();
   });
 
-  describe("#issue", async () => {
-    it("should update the user's balance",  async ()  => {
-      await mockEtherPriceOracle.setPrice(30000);
-      await cFA.issue({value: web3.toWei('1', 'ether')});
-      const balance = await cFA.balanceOf(accounts[0]);
-      assert.equal(balance.valueOf(), 30000);
+  // You can nest describe calls to create subsections.
+  describe("Deployment", function () {
+    // `it` is another Mocha function. This is the one you use to define your
+    // tests. It receives the test name, and a callback function.
+
+    // If the callback function is async, Mocha will `await` it.
+    it("Should set the right owner", async function () {
+      // Expect receives a value, and wraps it in an Assertion object. These
+      // objects have a lot of utility methods to assert values.
+
+      // This test expects the owner variable stored in the contract to be equal
+      // to our Signer's owner.
+      expect(await hardhatToken.minter()).to.equal(owner.address);
     });
 
-    it("increments the total supply",  async ()  => {
-      await mockEtherPriceOracle.setPrice(30000);
-      await cFA.issue({value: web3.toWei('1', 'ether')});
-      const totalSupply = await cFA.totalSupply.call();
-      assert.equal(totalSupply.toNumber(), 30000);
+    it("Should assign the total supply of tokens to the owner", async function () {
+      const ownerBalance = await hardhatToken.balanceOf(owner.address);
+      expect(await hardhatToken.totalSupply()).to.equal(ownerBalance);
     });
   });
 
-  describe("#withdraw", async ()  => {
-    it("won't let you withdraw more Xof than you have",  async ()  => {
-      await mockEtherPriceOracle.setPrice(30000);
-      await cFA.issue({value: web3.toWei('1', 'ether')});
-      try {
-        await cFA.withdraw(30001);
-      } catch (error) {
-        assert.match(error, /VM Exception[a-zA-Z0-9 ]+: invalid opcode/);
-      }
+  describe("Transfer", function () {
+
+    it("Should transfer tokens between accounts", async function () {
+      // Transfer 50 tokens from owner to addr1
+      await hardhatToken.transfer(addr1.address, 50);
+      const addr1Balance = await hardhatToken.balanceOf(addr1.address);
+      expect(addr1Balance).to.equal(50);
+
+      // Transfer 50 tokens from addr1 to addr2
+      // We use .connect(signer) to send a transaction from another account
+      await hardhatToken.connect(addr1).transfer(addr2.address, 50);
+      const addr2Balance = await hardhatToken.balanceOf(addr2.address);
+      expect(addr2Balance).to.equal(50);
     });
 
-    it("decrements the users balance",  async ()  => {
-      await mockEtherPriceOracle.setPrice(30000);
-      await cFA.issue({value: web3.toWei('1', 'ether')});
-      await cFA.withdraw(30000);
-      const balance = await cFA.balanceOf(accounts[0]);
-      assert.equal(balance.valueOf(), 0);
+    it("Should fail if sender doesn’t have enough tokens", async function () {
+      const initialOwnerBalance = await hardhatToken.balanceOf(owner.address);
+
+      // Try to send 1 token from addr2 (0 tokens) to owner (1000 tokens).
+      // `require` will evaluate false and revert the transaction.
+      await expect(
+        hardhatToken.connect(addr3).transfer(owner.address, 50)
+      ).to.be.revertedWith("Not enough tokens");
+
+      // Owner balance shouldn't have changed.
+      expect(await hardhatToken.balanceOf(owner.address)).to.equal(
+        initialOwnerBalance
+      );
     });
 
-    it("decrements the total supply",  async ()  => {
-      await mockEtherPriceOracle.setPrice(30000);
-      await cFA.issue({value: web3.toWei('1', 'ether')});
-      await cFA.withdraw(30000);
-      const totalSupply = await cFA.totalSupply.call();
-      assert.equal(totalSupply.toNumber(), 0);
+    it("Should update balances after transfers", async function () {
+      const initialOwnerBalance = await hardhatToken.balanceOf(owner.address);
+
+      // Transfer 100 tokens from owner to addr1.
+      await hardhatToken.transfer(addr1.address, 100);
+
+      // Transfer another 50 tokens from owner to addr2.
+      await hardhatToken.transfer(addr2.address, 50);
+
+      // Check balances.
+      const finalOwnerBalance = await hardhatToken.balanceOf(owner.address);
+      expect(finalOwnerBalance).to.equal(initialOwnerBalance - 150);
+
+      const addr1Balance = await hardhatToken.balanceOf(addr1.address);
+      expect(addr1Balance).to.equal(100);
+
+      const addr2Balance = await hardhatToken.balanceOf(addr2.address);
+      expect(addr2Balance).to.equal(50);
+    });
+  });
+
+  describe("Issue", function () {
+    it("Should Mint tokens to the correct accounts", async function () {
+      // Mint 50 tokens for addr1
+      await hardhatToken.issue(owner.address, 150);
+      const addr1Balance = await hardhatToken.balanceOf(owner.address);
+      expect(addr1Balance).to.equal(500000150);
     });
 
-    it("if the price hasn't changed you should get back what you put in",  async ()  => {
-      await mockEtherPriceOracle.setPrice(30000);
-      await cFA.issue({value: web3.toWei('1', 'ether')});
-      const amountWithdrawn = await cFA.withdraw.call(30000);
-      assert.equal(amountWithdrawn.toNumber(), web3.toWei('1', 'ether'));
+     it("Should fail if the sender is not the owner", async function () {
+      const initialOwnerBalance = await hardhatToken.balanceOf(owner.address);
+
+      // Try to send 1 token from addr1 (0 tokens) to owner (1000 tokens).
+      // `require` will evaluate false and revert the transaction.
+      await expect(
+        hardhatToken.connect(addr1).issue(owner.address, 1)
+      ).to.be.revertedWith("ERC20: owner only feature");
+
+      // Owner balance shouldn't have changed.
+      expect(await hardhatToken.balanceOf(owner.address)).to.equal(
+        initialOwnerBalance
+      );
+    });
+  });
+
+
+  describe("Burn", function () {
+    it("Should Burn tokens from the correct accounts", async function () {
+      // Mint 50 tokens for addr1
+      await hardhatToken.burn(owner.address, 150);
+      const addr1Balance = await hardhatToken.balanceOf(owner.address);
+      expect(addr1Balance).to.equal(500000000 - 150);
     });
 
-    it("if the price of Ether doubles you should get back half as much Ether (the same amount in USD)",  async ()  => {
-      await mockEtherPriceOracle.setPrice(30000);
-      await cFA.issue({value: web3.toWei('1', 'ether')});
-      await mockEtherPriceOracle.setPrice(60000);
-      const amountWithdrawn = await cFA.withdraw.call(30000);
-      assert.equal(amountWithdrawn.toNumber(), web3.toWei('0.5', 'ether'));
+     it("Should fail if the sender is not the owner", async function () {
+      const initialOwnerBalance = await hardhatToken.balanceOf(owner.address);
+
+      // Try to send 1 token from addr1 (0 tokens) to owner (1000 tokens).
+      // `require` will evaluate false and revert the transaction.
+      await expect(
+        hardhatToken.connect(addr1).burn(owner.address, 1)
+      ).to.be.revertedWith("ERC20: owner only feature");
+
+      // Owner balance shouldn't have changed.
+      expect(await hardhatToken.balanceOf(owner.address)).to.equal(
+        initialOwnerBalance
+      );
+    });
+  });
+
+  describe("Decrease Allowance", function () {
+    it("Should Decrease Allowance tokens from the correct accounts", async function () {
+      // Mint 50 tokens for addr1
+      await hardhatToken.burn(owner.address, 150);
+      const addr1Balance = await hardhatToken.balanceOf(owner.address);
+      expect(addr1Balance).to.equal(500000000 - 150);
     });
 
-    it("if the price of Ether gets cut in half and the contract can cover the your balance you should get back twice as much Ether (the same amount in USD)",  async ()  => {
-      await cFA.donate({value: web3.toWei('1', 'ether')});
-      await mockEtherPriceOracle.setPrice(30000);
-      await cFA.issue({value: web3.toWei('1', 'ether')});
-      await mockEtherPriceOracle.setPrice(15000);
-      const amountWithdrawn = await cFA.withdraw.call(30000);
-      assert.equal(amountWithdrawn.toNumber(), web3.toWei('2', 'ether'));
+     it("Should fail if the sender is not the owner", async function () {
+      const initialOwnerBalance = await hardhatToken.balanceOf(owner.address);
+
+      // Try to send 1 token from addr1 (0 tokens) to owner (1000 tokens).
+      // `require` will evaluate false and revert the transaction.
+      await expect(
+        hardhatToken.connect(addr1).burn(owner.address, 1)
+      ).to.be.revertedWith("ERC20: owner only feature");
+
+      // Owner balance shouldn't have changed.
+      expect(await hardhatToken.balanceOf(owner.address)).to.equal(
+        initialOwnerBalance
+      );
+    });
+  });
+
+   describe("Increase Allowance", function () {
+    it("Should Increase Allowance tokens from the correct accounts", async function () {
+      // Mint 50 tokens for addr1
+      await hardhatToken.burn(owner.address, 150);
+      const addr1Balance = await hardhatToken.balanceOf(owner.address);
+      expect(addr1Balance).to.equal(500000000 - 150);
     });
 
-    it("if the price of Ether gets cut in half and the contract can't cover the your balance you should get back half as much Ether",  async ()  => {
-      await mockEtherPriceOracle.setPrice(30000);
-      await cFA.issue({value: web3.toWei('1', 'ether')});
-      await mockEtherPriceOracle.setPrice(15000);
-      const amountWithdrawn = await cFA.withdraw.call(30000);
-      assert.equal(amountWithdrawn.toNumber(), web3.toWei('1', 'ether'));
+     it("Should fail if the sender is not the owner", async function () {
+      const initialOwnerBalance = await hardhatToken.balanceOf(owner.address);
+
+      // Try to send 1 token from addr1 (0 tokens) to owner (1000 tokens).
+      // `require` will evaluate false and revert the transaction.
+      await expect(
+        hardhatToken.connect(addr1).burn(owner.address, 1)
+      ).to.be.revertedWith("ERC20: owner only feature");
+
+      // Owner balance shouldn't have changed.
+      expect(await hardhatToken.balanceOf(owner.address)).to.equal(
+        initialOwnerBalance
+      );
     });
-  })
+  });
+
+  describe("TransferFrom", function () {
+    it("Should TransferFrom tokens from the correct accounts", async function () {
+      // Mint 50 tokens for addr1
+      await hardhatToken.burn(owner.address, 150);
+      const addr1Balance = await hardhatToken.balanceOf(owner.address);
+      expect(addr1Balance).to.equal(500000000 - 150);
+    });
+
+     it("Should fail if the sender is not the owner", async function () {
+      const initialOwnerBalance = await hardhatToken.balanceOf(owner.address);
+
+      // Try to send 1 token from addr1 (0 tokens) to owner (1000 tokens).
+      // `require` will evaluate false and revert the transaction.
+      await expect(
+        hardhatToken.connect(addr1).burn(owner.address, 1)
+      ).to.be.revertedWith("ERC20: owner only feature");
+
+      // Owner balance shouldn't have changed.
+      expect(await hardhatToken.balanceOf(owner.address)).to.equal(
+        initialOwnerBalance
+      );
+    });
+  });
+
+  describe("Freeze", function () {
+    it("Should Freeze tokens from the correct accounts", async function () {
+      // Mint 50 tokens for addr1
+      await hardhatToken.burn(owner.address, 150);
+      const addr1Balance = await hardhatToken.balanceOf(owner.address);
+      expect(addr1Balance).to.equal(500000000 - 150);
+    });
+
+     it("Should fail if the sender is not the owner", async function () {
+      const initialOwnerBalance = await hardhatToken.balanceOf(owner.address);
+
+      // Try to send 1 token from addr1 (0 tokens) to owner (1000 tokens).
+      // `require` will evaluate false and revert the transaction.
+      await expect(
+        hardhatToken.connect(addr1).burn(owner.address, 1)
+      ).to.be.revertedWith("ERC20: owner only feature");
+
+      // Owner balance shouldn't have changed.
+      expect(await hardhatToken.balanceOf(owner.address)).to.equal(
+        initialOwnerBalance
+      );
+    });
+  });
+
+  describe("Unfreeze", function () {
+    it("Should Unfreeze tokens from the correct accounts", async function () {
+      // Mint 50 tokens for addr1
+      await hardhatToken.burn(owner.address, 150);
+      const addr1Balance = await hardhatToken.balanceOf(owner.address);
+      expect(addr1Balance).to.equal(500000000 - 150);
+    });
+
+     it("Should fail if the sender is not the owner", async function () {
+      const initialOwnerBalance = await hardhatToken.balanceOf(owner.address);
+
+      // Try to send 1 token from addr1 (0 tokens) to owner (1000 tokens).
+      // `require` will evaluate false and revert the transaction.
+      await expect(
+        hardhatToken.connect(addr1).burn(owner.address, 1)
+      ).to.be.revertedWith("ERC20: owner only feature");
+
+      // Owner balance shouldn't have changed.
+      expect(await hardhatToken.balanceOf(owner.address)).to.equal(
+        initialOwnerBalance
+      );
+    });
+  });
+
 })
