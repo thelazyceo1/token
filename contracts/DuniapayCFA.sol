@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20Pausable.sol";
 contract DuniapayCFA is ERC20Burnable, ERC20Pausable, Ownable {
     constructor(address admin_)
         public
-        ERC20("Duniapay West African CFA franc", "dCFA")
+        ERC20("Duniapay West African CFA franc", "cXOF")
     {
         _mint(admin_, 500_000_000 ether);
         transferOwnership(admin_);

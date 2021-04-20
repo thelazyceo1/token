@@ -10,7 +10,9 @@
     "build": "hardhat compile",
     "clean": "rm -fr build/",
     "cli": "ganache-cli",
-    "test": "truffle test"
+    "test": "truffle test",
+    "deploy:alfajores": "hardhat deploy --network alfajores --step token",
+    "deploy:mainnet": "hardhat deploy --network mainnet --step token"
   },
   "keywords": [
     "contract"
