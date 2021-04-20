@@ -1,0 +1,14 @@
+
+{
+  "compilerOptions": {
+    "target": "es5",
+    "lib": ["ES2019"],
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "noUncheckedIndexedAccess": true
+  },
+  "include": ["./tasks"],
+  "files": ["./hardhat.config.ts"]
+}
