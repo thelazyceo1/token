@@ -10,6 +10,9 @@ contract DuniaBank {
     mapping(address => uint256) private balances;
     address public owner;
 
+    /// ERC20 
+    /// UBESWAP ROUTER
+
     // Log the event about a deposit being made by an address and its amount
     event LogDepositMade(address indexed accountAddress, uint256 amount);
 
@@ -41,7 +44,9 @@ contract DuniaBank {
     }
 
     /// @notice Withdraw ether from bank
-    /// @return The balance remaining for the user
+    /// @dev This does not return any excess ether sent to it
+    /// @param withdrawAmount amount you want to withdraw
+    /// @return remainingBal
     function withdraw(uint256 withdrawAmount)
         public
         returns (uint256 remainingBal)
@@ -70,7 +75,7 @@ contract DuniaBank {
         uint256 amountA,
         uint256 reserveA,
         uint256 reserveB
-    ) public pure virtual   returns (uint256 amountB) {
+    ) public returns (uint256 amountB) {
         return address(this).balance;
     }
 
