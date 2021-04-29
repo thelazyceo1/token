@@ -3,26 +3,36 @@
 pragma solidity >=0.7.0 <0.8.0;
 
 import "hardhat/console.sol";
+import "./IUniswapV2Router02.sol";
+import "./DuniapayCFA.sol";
 
 contract DuniaBank {
+
+    IUniswapV2Router02 public ubeswapRouter;
+    DuniapayCFA public duniaToken;
     uint8 private count;
 
     mapping(address => uint256) private balances;
     address public owner;
 
-    /// ERC20 
-    /// UBESWAP ROUTER
+    address[] public stakers;
+    mapping(address => uint) public stakingBalance;
+    mapping(address => bool) public hasStaked;
+    mapping(address => bool) public isStaking;
+
 
     // Log the event about a deposit being made by an address and its amount
     event LogDepositMade(address indexed accountAddress, uint256 amount);
 
-    // Constructor is "payable" so it can receive the initial funding of 30,
-    // required to reward the first 3 clients
-    constructor() public payable {
+    // Constructor
+     constructor(IUniswapV2Router02 _ubeswapRouter, DuniapayCFA _duniaToken) public {
         /* Set the owner to the creator of this contract */
         owner = msg.sender;
         count = 0;
+        ubeswapRouter = _ubeswapRouter;
+        duniaToken = _duniaToken;
     }
+
 
     /// @notice Enroll a customer with the bank,
     /// giving the first 3 of them 10 ether as reward
@@ -114,22 +124,8 @@ contract DuniaBank {
         console.log("Deadline %s", deadline);
     }
 
-    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
-        uint256 amountIn,
-        uint256 amountOutMin,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external virtual   {
-        console.log("swapExactTokensForTokensSupportingFeeOnTransferTokens");
-        console.log("AmountIn %s", amountIn);
-        console.log("amountOutMin %s", amountOutMin);
-        console.log("To %s", to);
-        console.log("Deadline %s", deadline);
-    }
-
     // liquidity
-    function addLiquidity(
+    function stakeTokens(
         address tokenA,
         address tokenB,
         uint256 amountADesired,
@@ -148,7 +144,7 @@ contract DuniaBank {
             uint256 liquidity
         )
     {
-        console.log("swapExactTokensForTokensSupportingFeeOnTransferTokens");
+        console.log("addLiquidity");
         console.log("tokenA %s", tokenA);
         console.log("tokenB %s", tokenB);
         console.log("amountADesired %s", amountADesired);
@@ -156,10 +152,27 @@ contract DuniaBank {
         console.log("amountAMin %s", amountAMin);
         console.log("to %s", to);
         console.log("deadline %s", deadline);
+           // Require amount greater than 0
+        require(amountADesired > 0, "amount cannot be 0");
+
+        // Trasnfer Mock Dai tokens to this contract for staking
+        duniaToken.transferFrom(msg.sender, address(this), amountADesired);
+
+        // Update staking balance
+        stakingBalance[msg.sender] = stakingBalance[msg.sender] + amountADesired;
+
+        // Add user to stakers array *only* if they haven't staked already
+        if(!hasStaked[msg.sender]) {
+            stakers.push(msg.sender);
+        }
+
+        // Update staking status
+        isStaking[msg.sender] = true;
+        hasStaked[msg.sender] = true;
     }
 
     // Remove liquidity
-    function removeLiquidity(
+    function unstakeTokens(
         address tokenA,
         address tokenB,
         uint256 liquidity,
@@ -176,29 +189,34 @@ contract DuniaBank {
         console.log("amountBMin %s", amountBMin);
         console.log("to %s", to);
         console.log("deadline %s", deadline);
+        // Fetch staking balance
+        uint balance = stakingBalance[msg.sender];
+
+        // Require amount greater than 0
+        require(balance > 0, "staking balance cannot be 0");
+
+        // Transfer Mock Dai tokens to this contract for staking
+        duniaToken.transfer(msg.sender, balance);
+
+        // Reset staking balance
+        stakingBalance[msg.sender] = 0;
+
+        // Update staking status
+        isStaking[msg.sender] = false;
     }
 
-    function removeLiquidityWithPermit(
-        address tokenA,
-        address tokenB,
-        uint256 liquidity,
-        uint256 amountAMin,
-        uint256 amountBMin,
-        address to,
-        uint256 deadline,
-        bool approveMax,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external virtual   returns (uint256 amountA, uint256 amountB) {
-        console.log("swapExactTokensForTokensSupportingFeeOnTransferTokens");
-        console.log("tokenA %s", tokenA);
-        console.log("tokenB %s", tokenB);
-        console.log("liquidity %s", liquidity);
-        console.log("amountAMin %s", amountAMin);
-        console.log("amountBMin %s", amountBMin);
-        console.log("to %s", to);
-        console.log("deadline %s", deadline);
-        console.log("deadline %s", approveMax);
+      function disburseRewards() public {
+        // Only owner can call this function
+        require(msg.sender == owner, "caller must be the owner");
+
+        // Issue tokens to all stakers
+        for (uint i=0; i<stakers.length; i++) {
+            address recipient = stakers[i];
+            uint balance = stakingBalance[recipient];
+            if(balance > 0) {
+                duniaToken.transfer(recipient, balance);
+            }
+        }
     }
+
 }
