@@ -6,7 +6,7 @@ import "hardhat/console.sol";
 import "./IUniswapV2Router02.sol";
 import "./DuniapayCFA.sol";
 
-contract DuniaBank {
+contract DuniaVault {
 
     IUniswapV2Router02 public ubeswapRouter;
     DuniapayCFA public duniaToken;
@@ -18,23 +18,31 @@ contract DuniaBank {
     address[] public stakers;
     mapping(address => uint) public stakingBalance;
     mapping(address => bool) public hasStaked;
+    mapping(address => bool) public isEnrolled;
+    mapping(address => bool) public isBlacklisted;
+
     mapping(address => bool) public isStaking;
+
+    address[] public minters;
+
+
 
 
     // Log the event about a deposit being made by an address and its amount
     event LogDepositMade(address indexed accountAddress, uint256 amount);
 
-    // Constructor
-     constructor(IUniswapV2Router02 _ubeswapRouter, DuniapayCFA _duniaToken) public {
+    /// Constructor
+     constructor(IUniswapV2Router02 _ubeswapRouter, DuniapayCFA _duniaToken, _minters) public {
         /* Set the owner to the creator of this contract */
         owner = msg.sender;
         count = 0;
         ubeswapRouter = _ubeswapRouter;
         duniaToken = _duniaToken;
+        minters = _minters;
     }
 
 
-    /// @notice Enroll a customer with the bank,
+    /// @notice Enroll a merchant with the bank,
     /// giving the first 3 of them 10 ether as reward
     /// @return The balance of the user after enrolling
     function enroll() public returns (uint256) {
@@ -218,5 +226,20 @@ contract DuniaBank {
             }
         }
     }
+    
+    function addAgent() public virtual  returns (uint256 amountA, uint256 amountB) {
+        require(msg.owner = owner, "Owner only operation");
 
+        if(!isEnrolled[msg.sender]) {
+            minters.push(msg.sender);
+        }
+    }
+
+    function removeAgent() public virtual  returns (uint256 amountA, uint256 amountB) {
+        require(msg.owner = owner, "Owner only operation");
+        
+        if(isEnrolled[msg.sender]) {
+            minters.pop(msg.sender);
+        }
+    }
 }
